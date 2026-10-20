@@ -1,0 +1,78 @@
+name: homelab
+
+# Stack unificado: todo el homelab en un solo compose.
+# Datos persistentes en el USB: /mnt/usb-backup/homelab-data
+# Solo Nginx y las herramientas de gestion exponen puertos.
+# La API vive en la red interna app_net (accesible solo via Nginx).
+
+services:
+  api:
+    build: ./api
+    container_name: api-python
+    restart: unless-stopped
+    environment:
+      - APP_ENV=production
+      - INTERVALO_SEGUNDOS=60
+    volumes:
+      - /mnt/usb-backup/homelab-data/api:/data   # SQLite persistido en el USB
+    networks:
+      - app_net
+    mem_limit: 128m
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - app_net
+    depends_on:
+      - api
+    mem_limit: 32m
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /mnt/usb-backup/homelab-data/portainer:/data
+    ports:
+      - "9000:9000"
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - /mnt/usb-backup/homelab-data/uptime-kuma:/app/data
+    ports:
+      - "3001:3001"
+
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    restart: unless-stopped
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "8080:80/tcp"
+    environment:
+      TZ: ${TZ}
+      WEBPASSWORD: ${PIHOLE_PASSWORD}
+    volumes:
+      - /mnt/usb-backup/homelab-data/pihole/etc-pihole:/etc/pihole
+      - /mnt/usb-backup/homelab-data/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+networks:
+  app_net:
+    driver: bridge
