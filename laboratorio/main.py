@@ -1,7 +1,3 @@
-"""API de metricas de la Raspberry Pi.
-Guarda una medicion cada INTERVALO_SEGUNDOS en SQLite (/data/metrics.db),
-persistido en el USB fuera del ciclo de vida del contenedor.
-"""
 import os
 import sqlite3
 import threading
@@ -10,15 +6,24 @@ from datetime import datetime
 
 import psutil
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 DB_PATH = "/data/metrics.db"
 INTERVALO = int(os.getenv("INTERVALO_SEGUNDOS", "60"))
 
-app = FastAPI(title="Pi Metrics API")
+app = FastAPI(
+    title="Pi Metrics API & Homelab Dashboard",
+    description="API de monitoreo y persistencia en SQLite para laboratorio de virtualización.",
+    version="1.2.0"
+)
+
+# Montar la carpeta de recursos estáticos para el frontend
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 def leer_temperatura():
-    """Temperatura del SoC en °C (DietPi / Raspberry Pi OS)."""
+    """Obtiene la temperatura del SoC en °C directamente desde el kernel de Linux (DietPi / Raspberry Pi OS)."""
     try:
         with open("/sys/class/thermal/thermal_zone0/temp") as f:
             return round(int(f.read().strip()) / 1000, 1)
@@ -27,6 +32,7 @@ def leer_temperatura():
 
 
 def medir():
+    """Recolecta métricas instantáneas del procesador, memoria RAM, swap, disco y uptime."""
     vm = psutil.virtual_memory()
     return {
         "fecha": datetime.now().isoformat(timespec="seconds"),
@@ -41,6 +47,7 @@ def medir():
 
 
 def init_db():
+    """Inicializa la tabla de métricas en SQLite si no existe."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     with sqlite3.connect(DB_PATH) as con:
         con.execute("""CREATE TABLE IF NOT EXISTS metricas(
@@ -50,6 +57,7 @@ def init_db():
 
 
 def guardar(m):
+    """Inserta una lectura de métricas en la base de datos."""
     with sqlite3.connect(DB_PATH) as con:
         con.execute(
             "INSERT INTO metricas(fecha,cpu,ram,ram_mb,swap_mb,temp,disco,uptime)"
@@ -60,6 +68,7 @@ def guardar(m):
 
 
 def recolector():
+    """Hilo secundario en segundo plano para muestreo periódico."""
     while True:
         guardar(medir())
         time.sleep(INTERVALO)
@@ -71,13 +80,21 @@ def arranque():
     threading.Thread(target=recolector, daemon=True).start()
 
 
+@app.get("/")
+def serve_dashboard():
+    """Sirve la interfaz gráfica en HTML/JS."""
+    return FileResponse("static/index.html")
+
+
 @app.get("/metrics")
 def metrics():
+    """Endpoint para obtener las métricas actuales en formato JSON."""
     return medir()
 
 
 @app.get("/historial")
 def historial(n: int = 20):
+    """Devuelve los últimos N registros almacenados en la base de datos SQLite."""
     with sqlite3.connect(DB_PATH) as con:
         filas = con.execute(
             "SELECT fecha,cpu,ram,ram_mb,swap_mb,temp,disco,uptime"
@@ -91,4 +108,15 @@ def historial(n: int = 20):
 
 @app.get("/salud")
 def salud():
+    """Liveness check para docker u orquestadores."""
     return {"estado": "ok"}
+
+
+@app.post("/action/log")
+def register_homelab_event(event_name: str):
+    """Endpoint POST para registrar eventos operativos."""
+    timestamp = datetime.now().isoformat()
+    return {
+        "status": "success",
+        "message": f"Evento '{event_name}' procesado correctamente a las {timestamp}."
+    }
