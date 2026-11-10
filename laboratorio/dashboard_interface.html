@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homelab Dashboard - Raspberry Pi 3+</title>
+    <!-- Tailwind CSS desde CDN para diseño moderno sin compilador -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col items-center p-6">
+
+    <div class="max-w-5xl w-full bg-slate-800 rounded-xl shadow-2xl p-6 border border-slate-700">
+        <!-- Cabecera -->
+        <header class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+            <div>
+                <h1 class="text-2xl font-bold text-cyan-400">Homelab Dashboard & Métricas</h1>
+                <p class="text-sm text-slate-400">Trabajo Final de Virtualización - Raspberry Pi 3+</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span id="last-update" class="text-xs text-slate-400">Actualizando...</span>
+                <div class="px-3 py-1 bg-emerald-500/20 text-emerald-400 text-xs font-semibold rounded-full border border-emerald-500/30 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Online
+                </div>
+            </div>
+        </header>
+
+        <!-- Tarjetas de Métricas en Tiempo Real -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <!-- CPU -->
+            <div class="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
+                <h2 class="text-xs uppercase tracking-wider text-slate-400 font-medium">Uso de CPU</h2>
+                <p id="cpu-val" class="text-3xl font-extrabold text-cyan-300 mt-2">--%</p>
+            </div>
+            <!-- RAM -->
+            <div class="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
+                <h2 class="text-xs uppercase tracking-wider text-slate-400 font-medium">Memoria RAM</h2>
+                <p id="ram-val" class="text-3xl font-extrabold text-amber-300 mt-2">--%</p>
+                <p id="ram-details" class="text-xs text-slate-400 mt-1">-- MB usados</p>
+            </div>
+            <!-- Temperatura -->
+            <div class="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
+                <h2 class="text-xs uppercase tracking-wider text-slate-400 font-medium">Temperatura SoC</h2>
+                <p id="temp-val" class="text-3xl font-extrabold text-rose-400 mt-2">-- °C</p>
+            </div>
+            <!-- Disco -->
+            <div class="bg-slate-700/50 p-4 rounded-lg border border-slate-600">
+                <h2 class="text-xs uppercase tracking-wider text-slate-400 font-medium">Uso de Disco</h2>
+                <p id="disk-val" class="text-3xl font-extrabold text-emerald-400 mt-2">--%</p>
+                <p id="uptime-details" class="text-xs text-slate-400 mt-1">Uptime: --</p>
+            </div>
+        </div>
+
+        <!-- Tabla de Historial (Persistencia en SQLite) -->
+        <div class="bg-slate-700/30 p-4 rounded-lg border border-slate-700">
+            <h2 class="text-sm font-semibold text-slate-300 mb-3">Historial de Registros en Base de Datos (SQLite)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300">
+                    <thead class="bg-slate-700 uppercase text-slate-400">
+                        <tr>
+                            <th class="p-2">Fecha / Hora</th>
+                            <th class="p-2">CPU</th>
+                            <th class="p-2">RAM (%)</th>
+                            <th class="p-2">RAM (MB)</th>
+                            <th class="p-2">Swap (MB)</th>
+                            <th class="p-2">Temp</th>
+                            <th class="p-2">Disco</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table" class="divide-y divide-slate-700">
+                        <!-- Se puebla dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script de consulta asíncrona -->
+    <script>
+        function formatUptime(seconds) {
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            return `${hrs}h ${mins}m`;
+        }
+
+        async function updateDashboard() {
+            try {
+                // 1. Petición a /metrics
+                const resMetrics = await fetch('/metrics');
+                const m = await resMetrics.json();
+
+                document.getElementById('cpu-val').innerText = m.cpu_porcentaje + '%';
+                document.getElementById('ram-val').innerText = m.ram_porcentaje + '%';
+                document.getElementById('ram-details').innerText = `${m.ram_mb_usados} MB usados`;
+                document.getElementById('temp-val').innerText = m.temperatura_c !== null ? m.temperatura_c + ' °C' : 'N/A';
+                document.getElementById('disk-val').innerText = m.disco_porcentaje + '%';
+                document.getElementById('uptime-details').innerText = `Uptime: ${formatUptime(m.uptime_segundos)}`;
+                document.getElementById('last-update').innerText = `Última actualización: ${m.fecha}`;
+
+                // 2. Petición a /historial
+                const resHistory = await fetch('/historial?n=5');
+                const history = await resHistory.json();
+
+                const tbody = document.getElementById('history-table');
+                tbody.innerHTML = '';
+                
+                history.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="p-2 font-mono text-slate-400">${row.fecha}</td>
+                        <td class="p-2 text-cyan-300 font-bold">${row.cpu}%</td>
+                        <td class="p-2 text-amber-300">${row.ram}%</td>
+                        <td class="p-2">${row.ram_mb} MB</td>
+                        <td class="p-2">${row.swap_mb} MB</td>
+                        <td class="p-2 text-rose-400">${row.temp !== null ? row.temp + ' °C' : 'N/A'}</td>
+                        <td class="p-2 text-emerald-400">${row.disco}%</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+            } catch (error) {
+                console.error("Error al actualizar el dashboard:", error);
+            }
+        }
+
+        setInterval(updateDashboard, 5000);
+        updateDashboard();
+    </script>
+</body>
+</html>
