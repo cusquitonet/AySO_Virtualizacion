@@ -1,6 +1,10 @@
 #!/bin/bash
 # Backup semanal del homelab: datos de contenedores + configuracion.
+# Ubicacion: /mnt/usb-backup/homelab-proyecto/scripts/backup.sh
 # Destino: /mnt/usb-backup/backups (mismo USB, carpeta separada).
+# Retencion: se conservan los 4 backups mas recientes de cada tipo.
+# Cron (domingos 03:00, crontab de root):
+#   0 3 * * 0 /bin/bash /mnt/usb-backup/homelab-proyecto/scripts/backup.sh >> /var/log/homelab_backup.log 2>&1
 set -e
 
 # Los datos de los contenedores son propiedad de root (los procesos

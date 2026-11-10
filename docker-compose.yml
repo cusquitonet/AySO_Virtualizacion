@@ -69,9 +69,10 @@ services:
       - "53:53/udp"
       - "8080:80/tcp"
     environment:
-      # Las variables de entorno estan en un archivo separado y oculto
+      # Las variables de entorno estan en un archivo separado y oculto (.env).
+      # Pi-hole v6 usa FTLCONF_webserver_api_password (WEBPASSWORD ya no se usa).
       TZ: ${TZ}
-      WEBPASSWORD: ${PIHOLE_PASSWORD}
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
     volumes:
       - /mnt/usb-backup/homelab-data/pihole/etc-pihole:/etc/pihole
       - /mnt/usb-backup/homelab-data/pihole/etc-dnsmasq.d:/etc/dnsmasq.d
