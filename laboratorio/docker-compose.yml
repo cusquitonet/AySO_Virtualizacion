@@ -6,6 +6,7 @@ name: homelab
 # La API vive en la red interna app_net (accesible solo via Nginx).
 
 services:
+  # Servicio API & Dashboard Python
   api:
     build: ./api
     container_name: api-python
@@ -19,6 +20,7 @@ services:
       - app_net
     mem_limit: 128m
 
+  # Servicio Proxy Inverso Nginx
   nginx:
     image: nginx:alpine
     container_name: nginx-proxy
@@ -33,6 +35,7 @@ services:
       - api
     mem_limit: 32m
 
+  # Servicio Portainer (Gestión de contenedores)
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
@@ -46,6 +49,7 @@ services:
     ports:
       - "9000:9000"
 
+  # Servicio Uptime Kuma (Monitoreo)
   uptime-kuma:
     image: louislam/uptime-kuma:latest
     container_name: uptime-kuma
@@ -55,6 +59,7 @@ services:
     ports:
       - "3001:3001"
 
+  # Servicio Pi-hole (DNS y filtrado de red)
   pihole:
     image: pihole/pihole:latest
     container_name: pihole
@@ -64,6 +69,7 @@ services:
       - "53:53/udp"
       - "8080:80/tcp"
     environment:
+      # Las variables de entorno estan en un archivo separado y oculto
       TZ: ${TZ}
       WEBPASSWORD: ${PIHOLE_PASSWORD}
     volumes:
